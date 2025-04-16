@@ -11,24 +11,11 @@ from sklearn.model_selection import KFold
 from sklearn import linear_model
 from sklearn.metrics import mean_squared_error, r2_score
 
-
-# Load the dataset
-# df = pd.read_csv('f1_pitstops_2018_2024.csv')
-
-# # Grab relevant columns
-# x_cols = ['Air_Temp_C', 'Track_Temp_C', 'Humidity_%', 'Wind_Speed_KMH']
-# x_variables = df[x_cols]
-# label = df['AvgPitStopTime']
-
-
-# # Clean data
-# df = df.dropna(subset=x_cols)
-# df = df.dropna(subset=['AvgPitStopTime'])
-
-# df.to_csv('f1_pitstops_2018_2024_cleaned.csv', index=False)
-
 # Load the cleaned dataset
 df = pd.read_csv('f1_pitstops_2018_2024_cleaned.csv')
+
+# Remove pit stop times over 40 seconds
+df = df[df['AvgPitStopTime'] <= 40]
 
 # Grab relevant columns
 x_cols = ['Track_Temp_C', 'Humidity_%', 'Wind_Speed_KMH']
@@ -36,27 +23,8 @@ x_variables = df[x_cols]
 label = df['AvgPitStopTime']
 
 # Describe the data
-# print(label.describe())
-# print(x_variables.describe())
-
-# # Check for normality of the data
-# for col in x_cols:
-#     plt.figure(figsize=(10, 6))
-#     plt.hist(df[col], bins=30, edgecolor='black')
-#     plt.title(f'Distribution of {col}')
-#     plt.xlabel(col)
-#     plt.ylabel('Frequency')
-#     plt.grid(axis='y', alpha=0.75)
-#     plt.show()
-
-# # Check for normality of the label
-# plt.figure(figsize=(10, 6))
-# plt.hist(label, bins=30, edgecolor='black')
-# plt.title('Average Pit Stop Time')
-# plt.xlabel('Average Pit Stop Time (seconds)')
-# plt.ylabel('Frequency')
-# plt.grid(axis='y', alpha=0.75)
-# plt.show()
+print(label.describe())
+print(x_variables.describe())
 
 
 # print("Correlation Results:")
@@ -75,14 +43,6 @@ label = df_normalized['AvgPitStopTime']
 print("Normalized Data:")
 print(df_normalized.describe())
 
-# Split the data into training and testing sets
-x_train, x_test, y_train, y_test = train_test_split(df_normalized[x_cols], df_normalized['AvgPitStopTime'], test_size=0.2, random_state=42)
-
-print("Training Set Size:")
-print(x_train.shape)
-print("Testing Set Size:")
-print(x_test.shape)
-
 ################################################################
 ######## BE VERY CAREFUL ABOUT CHANGING ANY CODE BELOW THIS LINE
 ################################################################
@@ -97,9 +57,10 @@ not_ynan = [not y for y in ynan] # flip truth values for masking
 X = X[not_ynan]
 y = y[not_ynan]
 X.reset_index(drop=True,inplace=True)
+y.reset_index(drop=True,inplace=True)
 
 # split into 5 folds 
-kf = KFold(n_splits=5)
+kf = KFold(n_splits=5, shuffle=True, random_state=42) # 5 folds
 
 beta = []
 RMSE_train = []
@@ -146,7 +107,7 @@ for i, (train_index, test_index) in enumerate(kf.split(X)):
     # The coefficient of determination (R2): 1 is perfect prediction
     R2_train.append(r2_score(yTrain,y_pred_train))
     R2_test.append(r2_score(yTest,y_pred_test))
-    # print("Coefficient of determination: %.2f" % r2_score(yTest, y_pred_test))
+    # print("Coefficient of determination: %s.2f" % r2_score(yTest, y_pred_test))
 
 print("\nthis is the beta: ")
 print(beta)
@@ -186,14 +147,26 @@ plt.ylabel('R2')
 # plt.show() 
 plt.savefig('ml_results.png')
 
-# plot model over track temperature data
+# Plot model over track temperature data
 plt.clf()
-plt.scatter(x_variables['Track_Temp_C'], label, color="black")
-plt.plot(xTest['Track_Temp_C'], y_pred_test, color='red', label='Regression line')
-plt.xlabel('Track Temperature (C)')
-plt.legend()
+# Scatter plot of the actual data points
+plt.scatter(x_variables['Track_Temp_C'], label, color="black", label="Actual Data")
+track_temp_range = np.linspace(x_variables['Track_Temp_C'].min(), x_variables['Track_Temp_C'].max(), 100).reshape(-1, 1)
+track_temp_df = pd.DataFrame(track_temp_range, columns=['Track_Temp_C'])
+for col in ['Humidity_%', 'Wind_Speed_KMH']:
+    track_temp_df[col] = x_variables[col].mean()
+
+# Predict the pit stop times using the regression model
+y_pred_line = regr.predict(track_temp_df)
+plt.plot(track_temp_range, y_pred_line, color='red', label='Regression Line')
+
+# Add labels and title
+plt.xlabel('Track Temperature (°C, Normalized)')
 plt.ylabel('Average Pit Stop Time (seconds)')
 plt.title('Average Pit Stop Time vs Track Temperature')
+plt.legend()
+
+# Show and save the plot
 plt.show()
 plt.savefig('model_over_track_temp.png')
 
